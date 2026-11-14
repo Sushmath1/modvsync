@@ -1,0 +1,12 @@
+pandas
+numpy
+# Pinned: newer pyarrow builds get blocked by Windows Smart App Control
+pyarrow==21.0.0
+scikit-learn
+plotly
+streamlit
+streamlit-folium
+folium
+geopy
+requests
+python-dotenv

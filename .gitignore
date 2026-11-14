@@ -1,0 +1,15 @@
+# Python environment and caches
+venv/
+__pycache__/
+*.pyc
+
+# Secrets
+.env
+
+# Data files (shared via Drive, not Git) - keep the folder structure via .gitkeep
+data/raw/modis/*
+data/raw/viirs/*
+data/processed/*
+!data/raw/modis/.gitkeep
+!data/raw/viirs/.gitkeep
+!data/processed/.gitkeep

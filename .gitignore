@@ -13,3 +13,6 @@ data/processed/*
 !data/raw/modis/.gitkeep
 !data/raw/viirs/.gitkeep
 !data/processed/.gitkeep
+
+# Trained ML models
+ml/models/

@@ -41,3 +41,4 @@ backend/logs/*
 /backend/data/raw/**
 !/backend/data/raw/**/
 !/backend/data/raw/**/.gitkeep
+backend/data/

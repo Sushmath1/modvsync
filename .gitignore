@@ -21,3 +21,23 @@ backend/venv/
 # Backend logs
 backend/logs/*
 !backend/logs/.gitkeep
+# ModVSync backend datasets - keep raw data outside Git
+/backend/data/raw/*
+!/backend/data/raw/**/
+!/backend/data/raw/**/.gitkeep
+
+# Generated and processed backend data
+/backend/data/processed/*
+!/backend/data/processed/.gitkeep
+
+# Generated analysis reports
+/backend/data/reports/*
+!/backend/data/reports/.gitkeep
+
+# Backend logs
+/backend/logs/*
+!/backend/logs/.gitkeep
+# Ignore all raw backend data, but preserve directory structure
+/backend/data/raw/**
+!/backend/data/raw/**/
+!/backend/data/raw/**/.gitkeep

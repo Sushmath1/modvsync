@@ -84,7 +84,7 @@ def records(data):
 @st.cache_data(ttl=60, show_spinner=False)
 def _http_get(url, params):
     try:
-        resp = requests.get(url, params=dict(params), timeout=30)
+        resp = requests.get(url, params=dict(params), timeout=120)
     except requests.RequestException as exc:
         raise ApiError(f"Cannot reach backend at {url}: {exc}") from exc
     try:

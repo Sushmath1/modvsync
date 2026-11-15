@@ -13,3 +13,11 @@ data/processed/*
 !data/raw/modis/.gitkeep
 !data/raw/viirs/.gitkeep
 !data/processed/.gitkeep
+# Backend Python virtual environments
+.venv/
+backend/.venv/
+backend/venv/
+
+# Backend logs
+backend/logs/*
+!backend/logs/.gitkeep

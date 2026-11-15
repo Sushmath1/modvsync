@@ -310,37 +310,72 @@ def associate(country, year, max_time_minutes=60, uncertainty_km=1.0,
     }
 
 
+
 def spatial_clusters(country, year, sensor="VIIRS", eps_km=2.0,
                      min_samples=5, max_records=10_000):
+    """Cluster detections spatially, separately for each acquisition date."""
     rows = get_detections(country, year, sensor, max_records)
     df = pd.DataFrame(rows)
+
     if df.empty:
-        return {"observation_count": 0, "cluster_count": 0, "clusters": []}
+        return {
+            "observation_count": 0,
+            "cluster_count": 0,
+            "noise_count": 0,
+            "clusters": [],
+        }
 
-    coords = np.radians(df[["latitude", "longitude"]].to_numpy())
-    labels = DBSCAN(
-        eps=eps_km / EARTH_RADIUS_KM,
-        min_samples=min_samples,
-        metric="haversine",
-        algorithm="ball_tree",
-    ).fit_predict(coords)
+    df["acquisition_date"] = (
+        pd.to_datetime(df["acq_datetime"], utc=True).dt.strftime("%Y-%m-%d")
+    )
 
-    df["cluster_id"] = labels
-    grouped = df[df["cluster_id"] >= 0].groupby("cluster_id")
     clusters = []
-    for cluster_id, group in grouped:
-        clusters.append({
-            "cluster_id": int(cluster_id),
-            "observation_count": len(group),
-            "centroid_latitude": float(group["latitude"].mean()),
-            "centroid_longitude": float(group["longitude"].mean()),
-            "mean_frp": float(group["frp"].mean()),
-        })
+    total_noise = 0
+    next_cluster_id = 0
+
+    for date, daily in df.groupby("acquisition_date"):
+        if len(daily) < min_samples:
+            total_noise += len(daily)
+            continue
+
+        coords = np.radians(
+            daily[["latitude", "longitude"]].to_numpy()
+        )
+
+        labels = DBSCAN(
+            eps=eps_km / EARTH_RADIUS_KM,
+            min_samples=min_samples,
+            metric="haversine",
+            algorithm="ball_tree",
+        ).fit_predict(coords)
+
+        daily = daily.copy()
+        daily["cluster_label"] = labels
+
+        total_noise += int((labels == -1).sum())
+
+        for label, group in daily[daily["cluster_label"] >= 0].groupby(
+            "cluster_label"
+        ):
+            frp_values = group["frp"].dropna()
+
+            clusters.append({
+                "cluster_id": next_cluster_id,
+                "acquisition_date": date,
+                "observation_count": len(group),
+                "centroid_latitude": float(group["latitude"].mean()),
+                "centroid_longitude": float(group["longitude"].mean()),
+                "mean_frp": (
+                    float(frp_values.mean())
+                    if not frp_values.empty else None
+                ),
+            })
+            next_cluster_id += 1
 
     return {
         "observation_count": len(df),
         "cluster_count": len(clusters),
-        "noise_count": int((labels == -1).sum()),
+        "noise_count": total_noise,
         "clusters": clusters,
         "parameters": {
             "eps_km": eps_km,
@@ -348,6 +383,49 @@ def spatial_clusters(country, year, sensor="VIIRS", eps_km=2.0,
             "sampling_method": "deterministic_uniform",
             "sampled_observations": len(df),
             "results_are_sampled": True,
+            "temporal_grouping": "acquisition_date",
         },
-        "warning": "Spatial detection clusters, not confirmed fire events.",
+        "warning": (
+            "Clusters are spatial detection groups calculated separately "
+            "for each acquisition date. They are not confirmed fire events."
+        ),
+    }
+
+
+def clustering_sensitivity(
+    country, year, sensor="VIIRS", min_samples=5
+):
+    """Compare DBSCAN results across multiple spatial distance thresholds."""
+    thresholds = [0.5, 1.0, 2.0, 5.0]
+    results = []
+
+    for eps in thresholds:
+        analysis = spatial_clusters(
+            country=country,
+            year=year,
+            sensor=sensor,
+            eps_km=eps,
+            min_samples=min_samples,
+            max_records=10_000,
+        )
+
+        results.append({
+            "eps_km": eps,
+            "observation_count": analysis["observation_count"],
+            "cluster_count": analysis["cluster_count"],
+            "noise_count": analysis["noise_count"],
+        })
+
+    return {
+        "country": country,
+        "year": year,
+        "sensor": sensor,
+        "min_samples": min_samples,
+        "sampling_method": "deterministic_uniform",
+        "results_are_sampled": True,
+        "comparisons": results,
+        "warning": (
+            "Exploratory sensitivity analysis. These thresholds are "
+            "not validated universal fire-event parameters."
+        ),
     }

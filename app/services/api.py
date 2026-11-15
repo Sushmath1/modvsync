@@ -21,7 +21,7 @@ class ApiError(Exception):
 # --- Settings ------------------------------------------------------------
 
 def _init_settings():
-    st.session_state.setdefault("data_mode", "Mock data")
+    st.session_state.setdefault("data_mode", "Live API")
     st.session_state.setdefault("api_base_url", DEFAULT_BASE_URL)
 
 

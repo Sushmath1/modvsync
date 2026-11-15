@@ -1,4 +1,4 @@
-
+from functools import lru_cache
 from fastapi import FastAPI, HTTPException, Query
 from datetime import datetime, timezone
 
@@ -54,20 +54,37 @@ def quality(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@lru_cache(maxsize=32)
+def _cached_detection_sample(country, year, sensor):
+    return pipeline.get_detections(country, year, sensor, 1000)
+
 @app.get("/api/v1/detections")
 def detections(
     country: str | None = None,
     year: int | None = Query(default=None, ge=2018, le=2024),
     sensor: str | None = None,
-    limit: int = Query(default=100, ge=1, le=10000),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=500, ge=1, le=1000),
 ):
     try:
-        rows = pipeline.get_detections(country, year, sensor, limit)
-        return response({"count": len(rows), "detections": rows})
+        sample_limit = 1000
+        rows = _cached_detection_sample(country, year, sensor)
+
+        start = (page - 1) * page_size
+        page_rows = rows[start:start + page_size]
+
+        return response({
+            "data": page_rows,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total_records": len(rows),
+            },
+            "sampled": True,
+            "sample_size": len(rows),
+        })
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-
-
 @app.get("/api/v1/analysis/frp")
 def frp(
     country: str | None = None,
@@ -126,3 +143,81 @@ def root():
         "docs": "/docs",
         "health": "/api/v1/health",
     }
+
+@app.get("/api/v1/analysis/sensitivity")
+def sensitivity(
+    country: str = Query(...),
+    year: int = Query(..., ge=2018, le=2024),
+    sensor: str = Query(default="VIIRS"),
+    min_samples: int = Query(default=5, ge=2, le=100),
+):
+    if country.title() not in ("Bolivia", "Chad"):
+        raise HTTPException(
+            status_code=400,
+            detail="Country must be Bolivia or Chad."
+        )
+
+    if sensor.upper() not in ("MODIS", "VIIRS"):
+        raise HTTPException(
+            status_code=400,
+            detail="Sensor must be MODIS or VIIRS."
+        )
+
+    try:
+        result = pipeline.clustering_sensitivity(
+            country.title(),
+            year,
+            sensor.upper(),
+            min_samples,
+        )
+        return response(result, [result["warning"]])
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/v1/dashboard/summary")
+@lru_cache(maxsize=1)
+def dashboard_summary():
+    try:
+        datasets = pipeline.inventory()
+        quality = pipeline.data_quality()
+
+        total = sum(item.get("rows", 0) for item in datasets)
+        modis = sum(
+            item.get("rows", 0)
+            for item in datasets
+            if item.get("sensor") == "MODIS"
+        )
+        viirs = sum(
+            item.get("rows", 0)
+            for item in datasets
+            if item.get("sensor") == "VIIRS"
+        )
+
+        valid_timestamps = (
+            quality["rows"] - quality["invalid_timestamps"]
+        )
+
+        return response({
+            "total_detections": total,
+            "modis_detections": modis,
+            "viirs_detections": viirs,
+            "spatial_clusters": None,
+            "spatial_candidate_pairs": None,
+            "spatiotemporal_candidate_pairs": None,
+            "dataset_status": "AVAILABLE" if datasets else "UNAVAILABLE",
+            "temporal_analysis_status": (
+                "AVAILABLE" if valid_timestamps > 0 else "UNAVAILABLE"
+            ),
+        })
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+
+@app.get("/api/v1/analysis/runs")
+def analysis_runs():
+    return response({
+        "data": [],
+        "message": "No analysis runs have been recorded yet."
+    })
